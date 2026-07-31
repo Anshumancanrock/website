@@ -13,6 +13,11 @@
         Referrer-Policy = "strict-origin-when-cross-origin"
         Permissions-Policy = "camera=(), microphone=(), geolocation=()"
         Strict-Transport-Security = "max-age=31536000"
+        # markdown-negotiation serves HTML or Markdown from one URL based on
+        # Accept, so both representations must declare it (RFC 9111 4.1). Set
+        # here, not in the function, so the HTML path keeps returning 304s;
+        # Accept-Encoding is spelled out because this replaces Netlify's value.
+        Vary = "Accept, Accept-Encoding"
 
 [[headers]]
     for = "/"

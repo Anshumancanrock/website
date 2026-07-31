@@ -277,7 +277,7 @@ export default async (request, context) => {
   const markdown = htmlToMarkdown(await response.text(), url.toString());
   const headers = new Headers(response.headers);
   headers.set("content-type", "text/markdown; charset=utf-8");
-  headers.set("vary", "Accept");
+  headers.append("vary", "Accept");
   headers.set("x-markdown-tokens", String(estimateTokens(markdown)));
 
   return new Response(markdown, {
