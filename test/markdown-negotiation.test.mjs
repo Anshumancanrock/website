@@ -292,6 +292,26 @@ describe("block structure", () => {
     );
   });
 
+  it("keeps three-level nested lists nested", async () => {
+    assert.equal(
+      await body(
+        "<main><ol><li>One<ul><li>Two<ol><li>Three</li></ol></li></ul></li><li>Four</li></ol></main>",
+      ),
+      "1. One\n   - Two\n     1. Three\n2. Four",
+    );
+  });
+
+  it("honors ol start", async () => {
+    assert.equal(
+      await body('<main><ol start="3"><li>third</li><li>fourth</li></ol></main>'),
+      "3. third\n4. fourth",
+    );
+    assert.equal(
+      await body('<main><ol start="0"><li>zero</li><li>one</li></ol></main>'),
+      "0. zero\n1. one",
+    );
+  });
+
   it("converts line breaks", async () => {
     assert.equal(await body("<main><p>one<br>two</p></main>"), "one\ntwo");
   });
@@ -347,8 +367,16 @@ describe("inline formatting", () => {
     );
   });
 
+  it("still finds <main> when a quoted attribute on it contains `>`", async () => {
+    assert.equal(await body('<main data-label="a > b"><p>inside</p></main>'), "inside");
+  });
+
   it("still strips tags when the `>` in an attribute is entity-encoded", async () => {
     assert.equal(await body('<main><p><span title="a &gt; b">Hello</span></p></main>'), "Hello");
+  });
+
+  it("leaves a stray `<` in text alone", async () => {
+    assert.equal(await body("<main><p>use a &lt; b, not a < b</p></main>"), "use a < b, not a < b");
   });
 });
 

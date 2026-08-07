@@ -83,9 +83,8 @@ function createBlockStore() {
   };
 }
 
-// Same idea as the block-store marker: hide `>` inside quoted attrs so `[^>]*`
-// tag scans don't stop early.
-const ATTR_GT = "\u0001";
+// Hide `>` inside quoted attrs so `[^>]*` tag scans don't stop early.
+const ATTR_GT = "\uE000ATTRGT\uE000";
 
 function findTagClose(html, openIndex) {
   let quote = null;
@@ -113,12 +112,17 @@ function protectQuotedAngles(html) {
     if (html[i] !== "<") {
       continue;
     }
+    // Skip stray `<` in text (`a < b`).
+    const next = html[i + 1];
+    if (!next || !/[a-zA-Z/!?]/.test(next)) {
+      continue;
+    }
     const close = findTagClose(html, i);
     if (close === -1) {
       break;
     }
     result += html.slice(cursor, i);
-    result += html.slice(i, close).replace(/>/g, ATTR_GT);
+    result += html.slice(i, close).split(">").join(ATTR_GT);
     result += ">";
     cursor = close + 1;
     i = close;
@@ -127,7 +131,7 @@ function protectQuotedAngles(html) {
 }
 
 function restoreQuotedAngles(text) {
-  return text.includes(ATTR_GT) ? text.replace(/\u0001/g, ">") : text;
+  return text.includes(ATTR_GT) ? text.split(ATTR_GT).join(">") : text;
 }
 
 // Depth-tracked because the TOC containers nest divs, so the first closing tag
@@ -219,19 +223,19 @@ function formatListItem(marker, content) {
   const indent = " ".repeat(marker.length);
   let out = `\n${marker}${lines[0].trimStart()}`;
   for (let i = 1; i < lines.length; i++) {
-    out += `\n${indent}${lines[i].trimStart()}`;
+    out += `\n${indent}${lines[i]}`;
   }
   return out;
 }
 
-function renderList(inner, ordered) {
+function renderList(inner, ordered, start = 1) {
   const items = extractDirectLis(inner);
   if (items.length === 0) {
     return "";
   }
   return items
     .map((item, index) => {
-      const marker = ordered ? `${index + 1}. ` : `- `;
+      const marker = ordered ? `${start + index}. ` : `- `;
       return formatListItem(marker, convertLists(item));
     })
     .join("");
@@ -246,12 +250,18 @@ function convertLists(html) {
   while ((match = open.exec(html))) {
     result += html.slice(cursor, match.index);
     const ordered = match[1].toLowerCase() === "ol";
+    const startAttr = ordered ? match[0].match(/\bstart\s*=\s*["']?(-?\d+)/i)?.[1] : null;
+    const start = startAttr == null ? 1 : Number.parseInt(startAttr, 10);
     const closed = findListClose(html, match.index + match[0].length);
     if (!closed) {
       result += html.slice(match.index);
       return result;
     }
-    result += renderList(html.slice(match.index + match[0].length, closed.innerEnd), ordered);
+    result += renderList(
+      html.slice(match.index + match[0].length, closed.innerEnd),
+      ordered,
+      Number.isFinite(start) ? start : 1,
+    );
     cursor = closed.after;
     open.lastIndex = closed.after;
   }
@@ -314,11 +324,13 @@ function toMarkdownTable(tableHtml) {
 }
 
 function htmlToMarkdown(html, pageUrl) {
-  const rawTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "";
-  const rawDescription =
-    html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["'][^>]*>/i)?.[1] ?? "";
+  html = protectQuotedAngles(html);
+  const rawTitle = restoreQuotedAngles(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  const rawDescription = restoreQuotedAngles(
+    html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["'][^>]*>/i)?.[1] ?? "",
+  );
 
-  let content = protectQuotedAngles(html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)?.[1] ?? html);
+  let content = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)?.[1] ?? html;
 
   content = content
     .replace(/<script[\s\S]*?<\/script>/gi, "")
